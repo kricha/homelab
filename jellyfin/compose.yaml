@@ -4,31 +4,37 @@ services:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel --no-autoupdate run
-    
-    env_file:
-      - path: ./.env
-        required: true
-      - path: /mnt/docker/jellyfin/.env
-        required: false
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
     networks:
-      - app_net
+      internal:
   jellyfin:
     container_name: jellyfin
     image: jellyfin/jellyfin:latest
     restart: unless-stopped
     volumes:
-      - jellyfin-cache:/cache:Z
-      - /mnt/docker/jellyfin:/config
-      - /media:/media
+      - jellyfin-cache:/cache
+      - ${JELLYFIN_CONFIG_PATH:-./config}:/config
+      - ${MEDIA_DIR_PATH:-./media}:/media
     devices:
       - /dev/dri/:/dev/dri/
     ports:
       - 8096:8096
     networks:
-      - app_net
+      internal:
+      homelab:
     depends_on:
       - cloudflared
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.jf-https.entrypoints=https
+      - traefik.http.routers.jf-https.rule=Host(`${TRAEFIK_DOMAIN:-traefik.example.com}`)
+      - traefik.http.routers.jf-https.tls=true
+      - traefik.http.routers.jf-https.tls.certresolver=cloudflare
+      - traefik.http.services.jf.loadbalancer.server.port=8096
 volumes:
   jellyfin-cache:
 networks:
-  app_net:
+  internal:
+  homelab:
+    external: true
