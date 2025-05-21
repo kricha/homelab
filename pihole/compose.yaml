@@ -1,0 +1,47 @@
+services:
+  cf_tunnel:
+    container_name: cf_tunnel
+    restart: unless-stopped
+    image: cloudflare/cloudflared:latest
+    command: proxy-dns
+    environment:
+      - TUNNEL_DNS_UPSTREAM=${TUNNEL_DNS_UPSTREAM:-https://1.1.1.1/dns-query,https://1.0.0.1/dns-query,https://9.9.9.9/dns-query,https://149.112.112.9/dns-query}
+      - TUNNEL_DNS_PORT=${TUNNEL_DNS_PORT:-5053}
+      - TUNNEL_DNS_ADDRESS=${TUNNEL_DNS_ADDRESS:-0.0.0.0}
+    networks:
+      pihole_internal:
+    security_opt:
+      - no-new-privileges:true
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    ports:
+      - 53:53/tcp
+      - 53:53/udp
+    cap_add:
+      - CHOWN
+      - SYS_NICE
+    environment:
+      - TZ=${TZ:-UTC}
+      - FTLCONF_webserver_api_password=${PIHOLE_PASSWORD:-123456}
+      - FTLCONF_dns_listeningMode=ALL
+      - FTLCONF_dns_upstreams=${PIHOLE_UPSTREAM_DNS:-cf_tunnel#5053}
+      - FTLCONF_dns_revServers=${PIHOLE_REV_SERVERS:-"true,192.168.0.0/24,192.168.0.1,.localdomain;true,192.168.0.0/24,192.168.0.1,.local"}
+    volumes:
+      - ${PIHOLE_CONFIG_DIR:-./etcd}:/etc/pihole
+      - ${PIHOLE_DNSMASQ_DIR:-./dnsmasq}:/etc/dnsmasq.d
+    restart: unless-stopped
+    networks:
+      homelab:
+      pihole_internal:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.pihole-https.entrypoints=${TRAEFIK_SECURE_ENTRYPOINT:-https}
+      - traefik.http.routers.pihole-https.rule=Host(`${TRAEFIK_PIHOLE_DOMAIN:-pihole.local}`)
+      - traefik.http.routers.pihole-https.tls=true
+      - traefik.http.routers.pihole-https.tls.certresolver=${TRAEFIK_CERTRESOLVER:-cloudflare}
+      - traefik.http.services.pihole.loadbalancer.server.port=80
+networks:
+  pihole_internal:
+  homelab:
+    external: true

@@ -1,0 +1,32 @@
+services:
+  traefik:
+    image: library/traefik:latest
+    container_name: traefik
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${DASHBOARD_PORT:-8080}:8080"  # Dashboard port, defaults to 8080, disable in production for security
+    volumes:
+      - "${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro"
+      - "${TRAEFIK_MAIN_CONFIG_FILE:-./traefik.yaml}:/etc/traefik/traefik.yaml:ro"
+      - "${ACME_FILE:-./acme.json}:/var/traefik/acme.json:rw" # should be chmod 600 ./acme.json
+      - "${TRAEFIK_CONFIG_DIR:-./config/}:/etc/traefik/config:ro"
+      - "${TRAEFIK_CERTS_DIR:-./certs/}:/var/traefik/certs/:rw"
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+    networks:
+      - homelab
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.entrypoints=https"
+      - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DOMAIN:-traefik.example.com}`)"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.tls.certresolver=cloudflare"
+      - "traefik.http.routers.traefik.tls.domains[0].main=${TRAEFIK_DOMAIN:-traefik.example.com}"
+      - "traefik.http.routers.traefik.tls.domains[0].sans=*.${TRAEFIK_DOMAIN:-traefik.example.com}"
+      - "traefik.http.routers.traefik.service=api@internal"
+networks:
+  homelab:
+    name: "${NETWORK_NAME:-homelab}"
+    external: true
